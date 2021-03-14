@@ -872,6 +872,45 @@ end
 skynet.error = c.error
 skynet.tracelog = c.trace
 
+local eloglevel = {
+	debug = 0,
+	warn = 1,
+	info = 2,
+	error = 3,
+}
+
+local log = function(level, flag, ...)
+	local envlevel = tonumber(skynet.getenv("loglevel")) or 0
+	local debug = debug
+	return function(...)
+		if level >= envlevel then 
+			local info = debug.getinfo(2, "Sl")
+			local infostr = string.format("[%s.%d]", info.source, info.currentline)
+			c.error(flag, infostr, ...)
+		end
+	end 
+end 
+
+local logd = log(eloglevel.debug, "[D]")
+local logw = log(eloglevel.warn, "[W]")
+local logi = log(eloglevel.info, "[I]")
+local loge = log(eloglevel.error, "[E]")
+skynet.logd = function(...)
+	return logd(...)
+end 
+
+skynet.logw = function(...)
+	return logw(...)
+end 
+
+skynet.logi = function(...)
+	return logi(...)
+end 
+
+skynet.loge = function(...)
+	return loge(...)
+end 
+
 -- true: force on
 -- false: force off
 -- nil: optional (use skynet.trace() to trace one message)

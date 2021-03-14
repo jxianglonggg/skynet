@@ -6,6 +6,7 @@
 3rd/lua/luac
 /cservice
 /luaclib
+/log
 *.so
 *.dSYM
 .DS_Store
