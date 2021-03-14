@@ -91,7 +91,7 @@ checkfilestate(struct logger *inst){
 			mkdir(path, 0777);
 		char fullname[SIZEFULLNAME];
 		snprintf(fullname, SIZEFULLNAME, "%s/%s", path, newfilename);
-		inst->handle = fopen(fullname,"a");
+		inst->handle = freopen(fullname,"a",stdout);
 		if(inst->handle){
 			inst->close = 1;
 			inst->createtime = nowtime;
