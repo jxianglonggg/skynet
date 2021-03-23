@@ -53,7 +53,7 @@ update3rd :
 CSERVICE = snlua logger gate harbor
 LUA_CLIB = skynet \
   client \
-  bson md5 sproto lpeg cjson $(TLS_MODULE)
+  bson md5 protobuf sproto lpeg cjson $(TLS_MODULE)
 
 LUA_CLIB_SKYNET = \
   lua-skynet.c lua-seri.c \
@@ -69,6 +69,14 @@ LUA_CLIB_SKYNET = \
   lua-debugchannel.c \
   lua-datasheet.c \
   lua-sharetable.c \
+  \
+
+LUA_CLIB_PROTOBUF = \
+  lpbc.c alloc.c \
+  array.c bootstrap.c context.c \
+  decode.c map.c pattern.c proto.c \
+  register.c rmessage.c stringpool.c \
+  varint.c wmessage.c \
   \
 
 SKYNET_SRC = skynet_main.c skynet_handle.c skynet_module.c skynet_mq.c \
@@ -120,6 +128,9 @@ $(LUA_CLIB_PATH)/lpeg.so : 3rd/lpeg/lpcap.c 3rd/lpeg/lpcode.c 3rd/lpeg/lpprint.c
 
 $(LUA_CLIB_PATH)/cjson.so : 3rd/lua-cjson/lua_cjson.c 3rd/lua-cjson/fpconv.c 3rd/lua-cjson/strbuf.c | $(LUA_CLIB_PATH)
 	$(CC) $(CFLAGS) $(SHARED) -I3rd/lua-cjson $^ -o $@ 
+
+$(LUA_CLIB_PATH)/protobuf.so : $(addprefix 3rd/lua-pbc/,$(LUA_CLIB_PROTOBUF)) | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) -I3rd/lua-pbc $^ -o $@ 
 
 clean :
 	rm -f $(SKYNET_BUILD_PATH)/skynet $(CSERVICE_PATH)/*.so $(LUA_CLIB_PATH)/*.so
