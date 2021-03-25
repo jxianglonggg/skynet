@@ -536,6 +536,15 @@ function mongo_collection:createIndexes(...)
 	return self.database:runCommand("createIndexes", self.name, "indexes", idx)
 end
 
+function mongo_collection:getIndexes()
+	local res = self.database:runCommand("listIndexes",self.name)
+	if res and res.ok == 1 then
+		return res.cursor.firstBatch
+	else
+		return
+	end
+end
+
 mongo_collection.ensureIndex = mongo_collection.createIndex
 
 function mongo_collection:drop()

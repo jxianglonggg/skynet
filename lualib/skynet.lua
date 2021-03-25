@@ -910,6 +910,7 @@ end
 skynet.loge = function(...)
 	return loge(...)
 end 
+print = logd 
 
 -- true: force on
 -- false: force off
