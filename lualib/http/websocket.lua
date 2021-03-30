@@ -255,36 +255,38 @@ local function resolve_accept(self)
     try_handle(self, "handshake", header, url)
     local recv_count = 0
     local recv_buf = {}
-    while true do
-        if _isws_closed(self.id) then
-            try_handle(self, "close")
-            return
-        end
-        local fin, op, payload_data = read_frame(self)
-        if op == "close" then
-            local code, reason = read_close(payload_data)
-            write_frame(self, "close")
-            try_handle(self, "close", code, reason)
-            break
-        elseif op == "ping" then
-            write_frame(self, "pong", payload_data)
-            try_handle(self, "ping")
-        elseif op == "pong" then
-            try_handle(self, "pong")
-        else
-            if fin and #recv_buf == 0 then
-                try_handle(self, "message", payload_data, op)
+    if self.handle then
+        while true do
+            if _isws_closed(self.id) then
+                try_handle(self, "close")
+                return
+            end
+            local fin, op, payload_data = read_frame(self)
+            if op == "close" then
+                local code, reason = read_close(payload_data)
+                write_frame(self, "close")
+                try_handle(self, "close", code, reason)
+                break
+            elseif op == "ping" then
+                write_frame(self, "pong", payload_data)
+                try_handle(self, "ping")
+            elseif op == "pong" then
+                try_handle(self, "pong")
             else
-                recv_buf[#recv_buf+1] = payload_data
-                recv_count = recv_count + #payload_data
-                if recv_count > MAX_FRAME_SIZE then
-                    error("payload_len is too large")
-                end
-                if fin then
-                    local s = table.concat(recv_buf)
-                    try_handle(self, "message", s, op)
-                    recv_buf = {}  -- clear recv_buf
-                    recv_count = 0
+                if fin and #recv_buf == 0 then
+                    try_handle(self, "message", payload_data, op)
+                else
+                    recv_buf[#recv_buf+1] = payload_data
+                    recv_count = recv_count + #payload_data
+                    if recv_count > MAX_FRAME_SIZE then
+                        error("payload_len is too large")
+                    end
+                    if fin then
+                        local s = table.concat(recv_buf)
+                        try_handle(self, "message", s, op)
+                        recv_buf = {}  -- clear recv_buf
+                        recv_count = 0
+                    end
                 end
             end
         end
@@ -395,22 +397,23 @@ function M.accept(socket_id, handle, protocol, addr)
             on_warning(ws_obj, sz)
         end)
     end
-
     local ok, err = xpcall(resolve_accept, debug.traceback, ws_obj)
-    local closed = _isws_closed(socket_id)
-    if not closed then
-        _close_websocket(ws_obj)
-    end
-    if not ok then
-        if err == socket_error then
-            if closed then
-                try_handle(ws_obj, "close")
+    if handle then 
+        local closed = _isws_closed(socket_id)
+        if not closed then
+            _close_websocket(ws_obj)
+        end
+        if not ok then
+            if err == socket_error then
+                if closed then
+                    try_handle(ws_obj, "close")
+                else
+                    try_handle(ws_obj, "error")
+                end
             else
-                try_handle(ws_obj, "error")
+                -- error(err)
+                return false, err
             end
-        else
-            -- error(err)
-            return false, err
         end
     end
     return true
@@ -422,7 +425,6 @@ function M.connect(url, header, timeout)
     if protocol ~= "wss" and protocol ~= "ws" then
         error(string.format("invalid protocol: %s", protocol))
     end
-    
     assert(host)
     local host_name, host_port = string.match(host, "^([^:]+):?(%d*)$")
     assert(host_name and host_port)
