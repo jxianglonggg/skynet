@@ -1,8 +1,7 @@
 local skynet = require "skynet"
 local gateserver = require "snax.gateserver"
-local netpack = require "skynet.netpack"
 local crypt = require "skynet.crypt"
-local socketdriver = require "skynet.socketdriver"
+local socket = require "anysocket"
 local assert = assert
 local b64encode = crypt.base64encode
 local b64decode = crypt.base64decode
@@ -22,6 +21,7 @@ Protocol:
 	Server -> Client
 
 	XXX ErrorCode
+		405 Forbidden
 		404 User Not Found
 		403 Index Expired
 		401 Unauthorized
@@ -80,6 +80,7 @@ local server = {}
 skynet.register_protocol {
 	name = "client",
 	id = skynet.PTYPE_CLIENT,
+	--pack = skynet.pack
 }
 
 local user_online = {}
@@ -99,13 +100,18 @@ end
 function server.logout(username)
 	local u = user_online[username]
 	user_online[username] = nil
-	if u.fd then
-		gateserver.closeclient(u.fd)
-		connection[u.fd] = nil
+
+	local fd = u.fd
+	if fd then
+		gateserver.closeclient(fd)
+		connection[fd] = nil
 	end
 end
 
 function server.login(username, secret)
+	print("server.login username=",username)
+	local uid, subid, servername = server.userid(username)
+	skynet.logi("uid=", uid, ";subid=", subid, ";servername=", servername)
 	assert(user_online[username] == nil)
 	user_online[username] = {
 		secret = secret,
@@ -123,7 +129,8 @@ function server.ip(username)
 	end
 end
 
-function server.start(conf)
+function server.start(conf, protocol)
+	socket.init(protocol)
 	local expired_number = conf.expired_number or 128
 
 	local handler = {}
@@ -132,21 +139,22 @@ function server.start(conf)
 		login = assert(conf.login_handler),
 		logout = assert(conf.logout_handler),
 		kick = assert(conf.kick_handler),
+		send_push = assert(conf.send_push_handler)
 	}
 
-	function handler.command(cmd, source, ...)
+	function handler.command(cmd, _, ...)
 		local f = assert(CMD[cmd])
 		return f(...)
 	end
 
-	function handler.open(source, gateconf)
+	function handler.open(_, gateconf)
 		local servername = assert(gateconf.servername)
 		return conf.register_handler(servername)
 	end
 
 	function handler.connect(fd, addr)
 		handshake[fd] = addr
-		gateserver.openclient(fd)
+		-- gateserver.openclient(fd)
 	end
 
 	function handler.disconnect(fd)
@@ -165,46 +173,56 @@ function server.start(conf)
 
 	-- atomic , no yield
 	local function do_auth(fd, message, addr)
-		local username, index, hmac = string.match(message, "([^:]*):([^:]*):([^:]*)")
+		local username, index, hmac = string.match(message, "([^:]*):([^:]*)")
+
 		local u = user_online[username]
 		if u == nil then
-			return "404 User Not Found"
+			local uid, subid, servername =  server.userid(username)
+			skynet.loge("uid=", uid, ";subid=", subid, ";servernam=", servername)
+			return "404 User Not Found "
 		end
 		local idx = assert(tonumber(index))
-		hmac = b64decode(hmac)
 
 		if idx <= u.version then
 			return "403 Index Expired"
 		end
-
+		print("wsmsgserver.lua 8")
 		local text = string.format("%s:%s", username, index)
-		local v = crypt.hmac_hash(u.secret, text)	-- equivalent to crypt.hmac64(crypt.hashkey(text), u.secret)
-		if v ~= hmac then
-			return "401 Unauthorized"
+		if not (protocol == "ws" or protocol == "wss") then
+			hmac = b64decode(hmac)
+			local v = crypt.hmac_hash(u.secret, text)	-- equivalent to crypt.hmac64(crypt.hashkey(text), u.secret)
+			if v ~= hmac then
+				return "401 Unauthorized"
+			end
 		end
 
+		local forbidTime = conf.create_msgagent_handler(username, fd)
+		if forbidTime then
+			return "Fail|" .. tostring(forbidTime)
+		end
 		u.version = idx
 		u.fd = fd
 		u.ip = addr
 		connection[fd] = u
 	end
 
-	local function auth(fd, addr, msg, sz)
-		local message = netpack.tostring(msg, sz)
-		local ok, result = pcall(do_auth, fd, message, addr)
+	local function auth(fd, addr, msg)
+		print("wsmsgserver.lua 1")
+		local ok, result = pcall(do_auth, fd, msg, addr)
+		print("ok=", ok, "result=", result)
 		if not ok then
-			skynet.error(result)
+			skynet.loge(result)
 			result = "400 Bad Request"
 		end
-
+		print("wsmsgserver.lua 2")
 		local close = result ~= nil
 
 		if result == nil then
 			result = "200 OK"
 		end
-
-		socketdriver.send(fd, netpack.pack(result))
-
+		print("wsmsgserver.lua 3")
+		socket.send(fd, result)
+		print("wsmsgserver.lua 4")
 		if close then
 			gateserver.closeclient(fd)
 		end
@@ -236,83 +254,33 @@ function server.start(conf)
 
 	local function do_request(fd, message)
 		local u = assert(connection[fd], "invalid fd")
-		local session = string.unpack(">I4", message, -4)
-		message = message:sub(1,-5)
-		local p = u.response[session]
-		if p then
-			-- session can be reuse in the same connection
-			if p[3] == u.version then
-				local last = u.response[session]
-				u.response[session] = nil
-				p = nil
-				if last[2] == nil then
-					local error_msg = string.format("Conflict session %s", crypt.hexencode(session))
-					skynet.error(error_msg)
-					error(error_msg)
-				end
-			end
-		end
 
-		if p == nil then
-			p = { fd }
-			u.response[session] = p
-			local ok, result = pcall(conf.request_handler, u.username, message)
-			-- NOTICE: YIELD here, socket may close.
-			result = result or ""
-			if not ok then
-				skynet.error(result)
-				result = string.pack(">BI4", 0, session)
-			else
-				result = result .. string.pack(">BI4", 1, session)
-			end
-
-			p[2] = string.pack(">s2",result)
-			p[3] = u.version
-			p[4] = u.index
-		else
-			-- update version/index, change return fd.
-			-- resend response.
-			p[1] = fd
-			p[3] = u.version
-			p[4] = u.index
-			if p[2] == nil then
-				-- already request, but response is not ready
-				return
-			end
-		end
-		u.index = u.index + 1
-		-- the return fd is p[1] (fd may change by multi request) check connect
-		fd = p[1]
-		if connection[fd] then
-			socketdriver.send(fd, p[2])
-		end
-		p[1] = nil
-		retire_response(u)
+		pcall(conf.request_handler, u.username, message)
 	end
 
 	local function request(fd, msg, sz)
-		local message = netpack.tostring(msg, sz)
-		local ok, err = pcall(do_request, fd, message)
+		local ok, err = pcall(do_request, fd, msg)
 		-- not atomic, may yield
 		if not ok then
-			skynet.error(string.format("Invalid package %s : %s", err, message))
+			skynet.error(string.format("Invalid package %s : %s", err, msg))
 			if connection[fd] then
 				gateserver.closeclient(fd)
 			end
 		end
 	end
 
-	function handler.message(fd, msg, sz)
+	function handler.message(fd, msg)
 		local addr = handshake[fd]
+		--print("wsmsgserver.lua ",fd,msg,addr)
 		if addr then
-			auth(fd,addr,msg,sz)
+			auth(fd,addr,msg)
 			handshake[fd] = nil
 		else
-			request(fd, msg, sz)
+			request(fd, msg)
 		end
 	end
 
-	return gateserver.start(handler)
+	return gateserver.start(handler, protocol)
 end
 
 return server
