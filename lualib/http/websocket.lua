@@ -18,6 +18,8 @@ local function _close_websocket(ws_obj)
     assert(ws_pool[id] == ws_obj)
     ws_pool[id] = nil
     ws_obj.close()
+    skynet.logi("_close_websocket fd =>", id)
+    skynet.logi("_close_websocket traceback ", debug.traceback())
 end
 
 local function _isws_closed(id)
