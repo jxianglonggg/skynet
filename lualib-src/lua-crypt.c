@@ -1032,6 +1032,17 @@ lxor_str(lua_State *L) {
 int lsha1(lua_State *L);
 int lhmac_sha1(lua_State *L);
 
+// defined in crc.c
+int lcrc32(lua_State *L);
+int lcrc64(lua_State *L);
+
+// defined sha256.c
+int lsha256(lua_State *L);
+int lhmac_sha256(lua_State *L);
+
+int lsha512(lua_State *L);
+int lhmac_sha512(lua_State *L);
+
 
 LUAMOD_API int
 luaopen_skynet_crypt(lua_State *L) {
@@ -1059,6 +1070,12 @@ luaopen_skynet_crypt(lua_State *L) {
 		{ "hmac_sha1", lhmac_sha1 },
 		{ "hmac_hash", lhmac_hash },
 		{ "xor_str", lxor_str },
+		{ "crc32", lcrc32 },
+		{ "crc64", lcrc64 },
+		{ "sha256", lsha256 },
+		{ "sha512", lsha512 },
+		{ "hmac_sha256", lhmac_sha256 },
+		{ "hmac_sha512", lhmac_sha512 },
 		{ "padding", NULL },
 		{ NULL, NULL },
 	};
