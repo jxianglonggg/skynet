@@ -51,9 +51,9 @@ local function launch_slave(auth_handler,command_handler)
 		local etoken = assert_socket("auth", anysocket.readline(fd),fd)
 		print("token =",etoken)
 		local token = crypt.base64decode(etoken)
-		local ok, server, uid, pass, id,sdk =  pcall(auth_handler, token, addr)
-		print("launch_slave", ok, server, uid, secret, pass, id,sdk)
-		return ok, server, uid, secret, pass, id,sdk
+		local ok, server, uid, pass, id, sdk, session_key =  pcall(auth_handler, token, addr)
+		print("launch_slave", ok, server, uid, secret, pass, id,sdk,session_key)
+		return ok, server, uid, secret, pass, id, sdk, session_key
 	end
 
 	local function ret_pack(ok, err, ...)
@@ -114,7 +114,7 @@ local function accept(conf, s, fd, addr)
 	-- call slave auth
 	print("accept1",fd, addr)
 	print("s=", s)
-	local ok, server, uid, secret, token, id,sdk = skynet.call(s, "lua",  fd, addr)
+	local ok, server, uid, secret, token, id,sdk,session_key = skynet.call(s, "lua",  fd, addr)
 	print("ok=", ok, ";server=", server, ";uid=", uid, ";token=", token)
 	if not ok then
 		if ok ~= nil then
@@ -132,7 +132,7 @@ local function accept(conf, s, fd, addr)
 		user_login[uid] = true
 	end
 	print("accept3")
-	local ok, err = pcall(conf.login_handler, server, uid, secret, addr, token, id,sdk)
+	local ok, err = pcall(conf.login_handler, server, uid, secret, addr, token, id,sdk,session_key)
 	-- unlock login
 	user_login[uid] = nil
 	if ok then

@@ -69,6 +69,7 @@ LUA_CLIB_SKYNET = \
   lua-debugchannel.c \
   lua-datasheet.c \
   lua-sharetable.c \
+  lua-vscdebugaux.c \
   \
 
 LUA_CLIB_PROTOBUF = \

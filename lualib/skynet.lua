@@ -879,17 +879,53 @@ local eloglevel = {
 	error = 3,
 }
 
-local log = function(level, flag, ...)
-	local envlevel = tonumber(skynet.getenv("loglevel")) or 0
-	local debug = debug
-	return function(...)
-		if level >= envlevel then 
-			local info = debug.getinfo(2, "Sl")
-			local infostr = string.format("[%s.%d]", info.source, info.currentline)
-			c.error(flag, infostr, ...)
+local debug = debug
+local log
+if (skynet.getenv "vscdbg_open" == "on") then
+	log = function(level, flag)
+		local envlevel = tonumber(skynet.getenv("loglevel")) or 0
+		local function concat(...)
+			local ms = { ... }
+			for i = 1, #ms do
+				ms[i] = tostring(ms[i])
+			end
+			ms[#ms + 1] = "\n"
+			return table.concat(ms, " ")
 		end
-	end 
-end 
+		local work_dir = skynet.getenv "vscdbg_workdir"
+		local vscdebugd
+		return function(...)
+			local is = coroutine.isyieldable()
+			if is then
+				vscdebugd = vscdebugd or skynet.uniqueservice("vscdebugd")
+				if level >= envlevel then
+					local info = debug.getinfo(2, "Sl")
+					local date = os.date("*t", os.time())
+					local date_str = string.format("[%d-%02d-%02d %02d:%02d:%02d]", date.year, date.month, date.day, date.hour, date.min, date.sec)
+					local msg = concat(flag, date_str, ...)
+					local source = ""
+					local char = string.sub(info.source, 1, 1)
+					if char == "@" then
+						source = string.sub(info.source, 3, -1)
+						source = work_dir .. source
+					end
+					skynet.send(vscdebugd, "lua", "output", "console", msg, source, info.currentline)
+				end
+			end
+		end
+	end
+else
+	log = function(level, flag)
+		local envlevel = tonumber(skynet.getenv("loglevel")) or 0
+		return function(...)
+			if level >= envlevel then
+				local info = debug.getinfo(2, "Sl")
+				local infostr = string.format("[%s.%d]", info.source, info.currentline)
+				c.error(flag, infostr, ...)
+			end
+		end
+	end
+end
 
 local logd = log(eloglevel.debug, "[D]")
 local logw = log(eloglevel.warn, "[W]")
@@ -897,20 +933,20 @@ local logi = log(eloglevel.info, "[I]")
 local loge = log(eloglevel.error, "[E]")
 skynet.logd = function(...)
 	return logd(...)
-end 
+end
 
 skynet.logw = function(...)
 	return logw(...)
-end 
+end
 
 skynet.logi = function(...)
 	return logi(...)
-end 
+end
 
 skynet.loge = function(...)
 	return loge(...)
-end 
-print = logd 
+end
+print = logd
 
 -- true: force on
 -- false: force off
@@ -1099,5 +1135,13 @@ debug.init(skynet, {
 	suspend = suspend,
 	resume = coroutine_resume,
 })
+
+if skynet.getenv "vscdbg_open" == "on" then
+	local vscdebug = require "skynet.vscdebug"
+	vscdebug.init(skynet, {
+		suspend = suspend,
+		resume = coroutine_resume,
+	})
+end
 
 return skynet

@@ -42,7 +42,9 @@ static const char *funcnamefromcode (lua_State *L, CallInfo *ci,
 
 static int currentpc (CallInfo *ci) {
   lua_assert(isLua(ci));
-  return pcRel(ci->u.l.savedpc, ci_func(ci)->p);
+  // 如果处于CIST_HOOKYIELD状态，应该加1。
+  const Instruction *pc = (ci->callstatus & CIST_HOOKYIELD) ? ci->u.l.savedpc + 1 : ci->u.l.savedpc;
+  return pcRel(pc, ci_func(ci)->p);
 }
 
 
