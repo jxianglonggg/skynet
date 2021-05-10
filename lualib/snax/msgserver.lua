@@ -280,6 +280,10 @@ function server.start(conf, protocol)
 		end
 	end
 
+	function handler.close(fd, code, reason)
+		skynet.logi("fd =>", fd, "close;code =>", code, ";reason =>", reason)
+	end
+
 	return gateserver.start(handler, protocol)
 end
 

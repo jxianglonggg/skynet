@@ -266,8 +266,8 @@ local function resolve_accept(self)
             local fin, op, payload_data = read_frame(self)
             if op == "close" then
                 local code, reason = read_close(payload_data)
-                write_frame(self, "close")
                 try_handle(self, "close", code, reason)
+                write_frame(self, "close")
                 break
             elseif op == "ping" then
                 write_frame(self, "pong", payload_data)
