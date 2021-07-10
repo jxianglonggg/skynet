@@ -23,6 +23,9 @@ TLS_MODULE=ltls
 TLS_LIB=/usr/lib64/openssl
 TLS_INC=/usr/include/openssl
 
+## cipher: use openssl cipher 
+CIPHER_MODULE = lcipher
+
 # jemalloc
 
 JEMALLOC_STATICLIB := 3rd/jemalloc/lib/libjemalloc_pic.a
@@ -53,7 +56,7 @@ update3rd :
 CSERVICE = snlua logger gate harbor
 LUA_CLIB = skynet \
   client \
-  bson md5 pb sproto lpeg cjson ecs $(TLS_MODULE)
+  bson md5 pb sproto lpeg cjson ecs $(TLS_MODULE) $(CIPHER_MODULE)
 
 LUA_CLIB_SKYNET = \
   lua-skynet.c lua-seri.c \
@@ -117,6 +120,9 @@ $(LUA_CLIB_PATH)/sproto.so : lualib-src/sproto/sproto.c lualib-src/sproto/lsprot
 	$(CC) $(CFLAGS) $(SHARED) -Ilualib-src/sproto $^ -o $@ 
 
 $(LUA_CLIB_PATH)/ltls.so : lualib-src/ltls.c | $(LUA_CLIB_PATH)
+	$(CC) $(CFLAGS) $(SHARED) -Iskynet-src -L$(TLS_LIB) -I$(TLS_INC) $^ -o $@ -lssl
+
+$(LUA_CLIB_PATH)/lcipher.so : lualib-src/lcipher.c | $(LUA_CLIB_PATH)
 	$(CC) $(CFLAGS) $(SHARED) -Iskynet-src -L$(TLS_LIB) -I$(TLS_INC) $^ -o $@ -lssl
 
 $(LUA_CLIB_PATH)/ecs.so : lualib-src/lua-ecs.c | $(LUA_CLIB_PATH)

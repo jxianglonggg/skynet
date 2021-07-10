@@ -2,6 +2,8 @@ include "config.path"
 
 -- preload = "./examples/preload.lua"	-- run preload.lua before every lua service run
 thread = 8
+enablessl = true
+enablecipher = true
 logger = nil
 logpath = "."
 harbor = 1
