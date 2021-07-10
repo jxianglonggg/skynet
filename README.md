@@ -5,8 +5,8 @@ Skynet is a lightweight online game framework which can be used in many other fi
 For Linux, install autoconf first for jemalloc:
 
 ```
-git clone https://github.com/cloudwu/skynet.git
 cd skynet
+cd 3rd && tar xzvf jemalloc.tar.gz
 make 'PLATFORM'  # PLATFORM can be linux, macosx, freebsd linux_nojemalloc now
 ```
 
